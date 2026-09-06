@@ -12,10 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('locations', function (Blueprint $table) {
-            $table->id();$table->unsignedBigInteger('external_id')->unique()->nullable(); // API ID (nullable for unknown sources)
+            $table->id();
+            $table->unsignedBigInteger('external_id')->unique()->nullable();
             $table->string('name');
-            $table->string('type')->nullable();$table->string('dimension')->nullable();
-            $table->jsonb('raw_data')->nullable(); // BONUS: Store the original JSON$table->timestamps();
+            $table->string('type')->nullable();
+            $table->string('dimension')->nullable();
+            $table->jsonb('raw_data')->nullable();
+            $table->timestamps();
         });
     }
 
