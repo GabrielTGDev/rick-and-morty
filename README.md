@@ -1,58 +1,259 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Rick and Morty API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+[![PHP 8.3](https://img.shields.io/badge/PHP-8.3-777BB4?logo=php&logoColor=white)](https://www.php.net/)
+[![Laravel 13](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)](https://laravel.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker Compose](https://img.shields.io/badge/Docker_Compose-2-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-## About Laravel
+REST API for synchronizing and querying Rick and Morty characters, locations, and episodes. It includes character filtering, custom Bearer token authentication, and favorite management.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Prerequisites
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Docker Desktop o Docker Engine.
+- Docker Compose.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Installation
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone <repo>
+cd rick-and-morty
+cp .env.example .env
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+> Update the `.env` information (database settings and `WWWUSER` and `WWWGROUP` IDs).
 
-## Contributing
+```bash
+./vendor/bin/sail up -d
+./vendor/bin/sail artisan migrate
+./vendor/bin/sail artisan app:sync-rick-and-morty
+./vendor/bin/sail artisan test
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+The synchronization downloads data from the public Rick and Morty API and persists it locally. Once started, the API is available at `http://localhost:8000`.
 
-## Code of Conduct
+## Architectural Decisions
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- **PostgreSQL and JSONB:** normalized data is stored in relational tables, while the original external API response is retained in `JSONB`. This supports auditing and mapping evolution without losing information.
+- **Decoupled HTTP client and DTOs:** the external client contract, HTTP implementation, and DTOs separate network communication from persistence. This improves type safety, testing with `Http::fake()`, and provider substitution.
+- **Custom token authentication:** a Bearer token stored on the user and custom middleware meet the authentication requirement without adding external authentication dependencies.
+- **Idempotency and fault tolerance:** `updateOrCreate()` and relationship synchronization prevent duplicates on repeated executions. The client applies timeouts and retries, while each page is processed in a transaction to preserve previously synchronized data if a partial failure occurs.
 
-## Security Vulnerabilities
+## Sequence Diagrams
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+<details>
+<summary>Synchronization Flow</summary>
+
+```mermaid
+sequenceDiagram
+	participant Operator
+	participant Command as Artisan Command
+	participant Sync as DataSyncService
+	participant API as Rick and Morty API
+	participant DB as PostgreSQL
+
+	Operator->>Command: app:sync-rick-and-morty
+	Command->>Sync: sync locations
+	loop Each page
+		Sync->>API: GET locations page
+		API-->>Sync: DTOs and pagination metadata
+		Sync->>DB: transaction and updateOrCreate locations
+	end
+	Command->>Sync: sync episodes
+	loop Each page
+		Sync->>API: GET episodes page
+		API-->>Sync: DTOs and pagination metadata
+		Sync->>DB: transaction and updateOrCreate episodes
+	end
+	Command->>Sync: sync characters
+	loop Each page
+		Sync->>API: GET characters page
+		API-->>Sync: DTOs and pagination metadata
+		Sync->>DB: transaction, upsert characters, sync episodes
+	end
+	Sync-->>Command: processed counts
+	Command-->>Operator: synchronization completed
+```
+</details>
+
+<details>
+<summary><code>POST /api/register</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>API: POST register with name, email, password
+	API->>API: validate request and hash password
+	API->>DB: create user with generated API token
+	DB-->>API: user created
+	API-->>Client: 201 Created with token
+```
+</details>
+
+<details>
+<summary><code>POST /api/login</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>API: POST login with email and password
+	API->>API: validate request
+	API->>DB: find user by email
+	DB-->>API: user or no result
+	alt Valid credentials
+		API->>API: verify password and generate token
+		API->>DB: store new API token
+		API-->>Client: 200 OK with token
+	else Invalid credentials
+		API-->>Client: 401 Unauthorized
+	end
+```
+</details>
+
+<details>
+<summary><code>POST /api/logout</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant Middleware as Token Middleware
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>Middleware: POST logout with Bearer token
+	Middleware->>DB: find user by API token
+	alt Valid token
+		DB-->>Middleware: authenticated user
+		Middleware->>API: set request user
+		API->>DB: clear API token
+		API-->>Client: 200 OK
+	else Missing or invalid token
+		Middleware-->>Client: 401 Unauthorized
+	end
+```
+</details>
+
+<details>
+<summary><code>GET /api/characters</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>API: GET characters with optional filters and page
+	API->>DB: query characters with locations and pagination
+	DB-->>API: paginated character collection
+	API-->>Client: 200 OK with standard success response
+```
+</details>
+
+<details>
+<summary><code>GET /api/characters/{id}</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>API: GET character by ID
+	API->>DB: find character with locations and episodes
+	alt Character found
+		DB-->>API: character and relationships
+		API-->>Client: 200 OK with standard success response
+	else Character not found
+		API-->>Client: 404 Not Found
+	end
+```
+</details>
+
+<details>
+<summary><code>GET /api/user/favorites</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant Middleware as Token Middleware
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>Middleware: GET favorites with Bearer token
+	Middleware->>DB: find user by API token
+	alt Valid token
+		DB-->>Middleware: authenticated user
+		Middleware->>API: set request user
+		API->>DB: paginate favorite characters
+		DB-->>API: paginated favorites
+		API-->>Client: 200 OK with standard success response
+	else Missing or invalid token
+		Middleware-->>Client: 401 Unauthorized
+	end
+```
+</details>
+
+<details>
+<summary><code>POST /api/characters/{id}/favorite</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant Middleware as Token Middleware
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>Middleware: POST favorite with Bearer token
+	Middleware->>DB: find user by API token
+	alt Valid token
+		DB-->>Middleware: authenticated user
+		Middleware->>API: set request user
+		API->>DB: syncWithoutDetaching favorite
+		DB-->>API: favorite relation persisted
+		API-->>Client: 201 Created
+	else Missing or invalid token
+		Middleware-->>Client: 401 Unauthorized
+	end
+```
+</details>
+
+<details>
+<summary><code>DELETE /api/characters/{id}/favorite</code></summary>
+
+```mermaid
+sequenceDiagram
+	participant Client
+	participant Middleware as Token Middleware
+	participant API as Laravel API
+	participant DB as PostgreSQL
+
+	Client->>Middleware: DELETE favorite with Bearer token
+	Middleware->>DB: find user by API token
+	alt Valid token
+		DB-->>Middleware: authenticated user
+		Middleware->>API: set request user
+		API->>DB: detach favorite relation
+		DB-->>API: favorite relation removed
+		API-->>Client: 200 OK
+	else Missing or invalid token
+		Middleware-->>Client: 401 Unauthorized
+	end
+```
+</details>
+
+## OpenAPI Documentation
+
+The endpoint, schema, filter, and Bearer security specification is available in [openapi.yaml](openapi.yaml).
+
+## Developer
+
+Created by Gabriel Trujillo.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This project is licensed under the [MIT License](https://opensource.org/license/mit).
