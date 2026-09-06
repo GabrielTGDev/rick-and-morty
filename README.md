@@ -11,16 +11,23 @@ REST API for synchronizing and querying Rick and Morty characters, locations, an
 
 - Docker Desktop o Docker Engine.
 - Docker Compose.
+- Composer (only required once, to install PHP dependencies and generate the `sail` binary).
 
 ## Installation
 
 ```bash
-git clone <repo>
+git clone https://github.com/GabrielTGDev/rick-and-morty.git
 cd rick-and-morty
 cp .env.example .env
 ```
 
 > Update the `.env` information (database settings and `WWWUSER` and `WWWGROUP` IDs).
+
+`vendor/` is not committed to the repository, so dependencies must be installed before `sail` is available. If you don't have Composer installed locally, you can run it through Docker:
+
+```bash
+docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/var/www/html" -w /var/www/html composer:2 composer install --ignore-platform-reqs
+```
 
 ```bash
 ./vendor/bin/sail up -d
