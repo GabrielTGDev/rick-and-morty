@@ -15,7 +15,7 @@ REST API for synchronizing and querying Rick and Morty characters, locations, an
 ## Installation
 
 ```bash
-git clone <repo>
+git clone https://github.com/GabrielTGDev/rick-and-morty.git
 cd rick-and-morty
 cp .env.example .env
 ```
