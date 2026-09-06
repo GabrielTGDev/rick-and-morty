@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use App\Models\User;
@@ -17,7 +19,7 @@ class AuthenticateWithApiToken
         $token = $request->bearerToken();
 
         if (!$token || !($user = User::where('api_token', $token)->first())) {
-            return $this->errorResponse('No autorizado. Token inválido o no provisto.', 401);
+            return $this->errorResponse('Unauthorized. Invalid or not provided token.', 401);
         }
 
         // Asignar el usuario autenticado a la petición activa

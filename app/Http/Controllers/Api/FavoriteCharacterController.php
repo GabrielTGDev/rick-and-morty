@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -22,7 +24,7 @@ class FavoriteCharacterController extends Controller
         $user = $request->user();
         $user->favoriteCharacters()->syncWithoutDetaching([$characterId]);
 
-        return $this->successResponse(null, 'Personaje añadido a favoritos', 201);
+        return $this->successResponse(null, 'Character added to favorites', 201);
     }
 
     public function destroy(Request $request, int $characterId): \Illuminate\Http\JsonResponse
@@ -30,6 +32,6 @@ class FavoriteCharacterController extends Controller
         $user = $request->user();
         $user->favoriteCharacters()->detach($characterId);
 
-        return $this->successResponse(null, 'Personaje eliminado de favoritos');
+        return $this->successResponse(null, 'Character removed from favorites');
     }
 }

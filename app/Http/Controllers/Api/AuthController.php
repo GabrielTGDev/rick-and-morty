@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -60,7 +62,7 @@ class AuthController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Sesión cerrada correctamente.',
+            'message' => 'Successfully logged out.',
         ]);
     }
 }
