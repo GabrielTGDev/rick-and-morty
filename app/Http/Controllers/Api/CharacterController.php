@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -14,7 +16,7 @@ class CharacterController extends Controller
     /**
      * Display a listing of the resource.
      *
-     * @param \Illuminate\Http\Request $request
+     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function index(Request $request): \Illuminate\Http\JsonResponse
@@ -50,7 +52,7 @@ class CharacterController extends Controller
         $character = Character::with(['origin', 'currentLocation', 'episodes'])->find($id);
 
         if (!$character) {
-            return $this->errorResponse('Personaje no encontrado', 404);
+            return $this->errorResponse('Character not found', 404);
         }
 
         return $this->successResponse($character);

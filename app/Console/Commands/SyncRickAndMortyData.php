@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Services\DataSyncService;
@@ -9,7 +11,7 @@ use Symfony\Component\Console\Helper\ProgressBar;
 class SyncRickAndMortyData extends Command
 {
     protected $signature = 'app:sync-rick-and-morty';
-    protected $description = 'Sincroniza localizaciones, episodios y personajes de la API externa de Rick and Morty';
+    protected $description = 'Sync locations, episodes, and characters from the external Rick and Morty API';
     private ?ProgressBar $progressBar = null;
     private ?ProgressBar $countdownBar = null;
     private int $currentPage = 0;
@@ -17,34 +19,34 @@ class SyncRickAndMortyData extends Command
 
     public function handle(DataSyncService $syncService): int
     {
-        $this->info('Iniciando proceso de sincronización...');
+        $this->info('Starting synchronization process...');
         $syncService->setProgressCallback(fn (array $event) => $this->renderApiProgress($event));
 
         try {
             $locCount = $this->runPhase(
-                '1/3. Sincronizando localizaciones',
+                '1/3. Synchronizing locations',
                 fn (callable $progress) => $syncService->syncLocations($progress)
             );
-            $this->info("Localizaciones procesadas: {$locCount}");
+            $this->info("Locations processed: {$locCount}");
 
             $epCount = $this->runPhase(
-                '2/3. Sincronizando episodios',
+                '2/3. Syncing episodes',
                 fn (callable $progress) => $syncService->syncEpisodes($progress)
             );
-            $this->info("Episodios procesados: {$epCount}");
+            $this->info("Processed episodes: {$epCount}");
 
             $charCount = $this->runPhase(
-                '3/3. Sincronizando personajes y relaciones',
+                '3/3. Syncing characters and relationships',
                 fn (callable $progress) => $syncService->syncCharacters($progress)
             );
-            $this->info("Personajes procesados: {$charCount}");
+            $this->info("Processed characters: {$charCount}");
 
             $this->newLine();
-            $this->info('¡Sincronización completada exitosamente!');
+            $this->info('Synchronization completed successfully!');
             return Command::SUCCESS;
         } catch (\Exception $e) {
             $this->finishProgressBar();
-            $this->error("Falló la sincronización: {$e->getMessage()}");
+            $this->error("Synchronization failed: {$e->getMessage()}");
             return Command::FAILURE;
         }
     }
@@ -115,11 +117,11 @@ class SyncRickAndMortyData extends Command
                 }
             }
             
-            $this->ensureProgressBar();
-            $this->progressBar->setMessage(
-                "  ✓ {$event['resource']}: respuesta 200"
+            $progressBar = $this->ensureProgressBar();
+            $progressBar->setMessage(
+                "  ✓ {$event['resource']}: answer 200"
             );
-            $this->progressBar->display();
+            $progressBar->display();
         }
 
         if ($event['event'] === 'error') {
@@ -141,7 +143,7 @@ class SyncRickAndMortyData extends Command
             // Crea barra de countdown independiente
             if (isset($event['totalSeconds'])) {
                 $this->countdownBar = $this->output->createProgressBar($event['totalSeconds']);
-                $this->countdownBar->setFormat('  ⏳ Esperando reintentos: %current%/%max% segundos');
+                $this->countdownBar->setFormat('  ⏳ Waiting for retries: %current%/%max% seconds');
                 $this->countdownBar->start();
             }
         }
@@ -165,23 +167,25 @@ class SyncRickAndMortyData extends Command
             
             // Reinicia la barra de progreso
             $this->progressBar = null;
-            $this->ensureProgressBar();
-            $this->progressBar->setMessage(
-                "  ✗ {$event['resource']}: agotados los {$event['attempts']} intentos"
+            $progressBar = $this->ensureProgressBar();
+            $progressBar->setMessage(
+                "  ✗ {$event['resource']}: exhausted {$event['attempts']} attempts"
             );
-            $this->progressBar->display();
+            $progressBar->display();
         }
     }
 
-    private function ensureProgressBar(): void
+    private function ensureProgressBar(): ProgressBar
     {
         if ($this->progressBar === null) {
             // Solo se crea si tenemos maxPages, sino crea una dummy
             $max = $this->maxPages ?? 1;
             $this->progressBar = $this->output->createProgressBar($max);
-            $this->progressBar->setFormat('  Progreso: %current%/%max% [%bar%]');
+            $this->progressBar->setFormat('  Progress: %current%/%max% [%bar%]');
             $this->progressBar->start();
         }
+
+        return $this->progressBar;
     }
 
     private function finishProgressBar(): void
